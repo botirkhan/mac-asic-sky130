@@ -1,0 +1,119 @@
+name: SKY130 RTL-to-GDSII
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/results.md"
+      - "docs/layout.png"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  LIBRELANE_VERSION: "3.0.17"
+
+jobs:
+  rtl-sim:
+    name: RTL regression (Icarus, 8 seeds)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: RTL regression vs C++ golden model
+        run: bash scripts/run_sim.sh rtl 8
+      - name: Job summary
+        if: always()
+        run: cat build/sim_rtl/results.md >> "$GITHUB_STEP_SUMMARY" || true
+
+  flow:
+    name: LibreLane @ ${{ matrix.period }} ns
+    needs: rtl-sim
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        period: [10, 7, 5]
+    # The 5 ns target is meant to probe the timing limit, so it may fail.
+    continue-on-error: ${{ matrix.period == 5 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install LibreLane and Icarus
+        run: |
+          pip install "librelane==${LIBRELANE_VERSION}"
+          sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Write config for this clock target
+        run: |
+          sed "s/^CLOCK_PERIOD:.*/CLOCK_PERIOD: ${{ matrix.period }}/" config.yaml > config_p${{ matrix.period }}.yaml
+          grep CLOCK_PERIOD config_p${{ matrix.period }}.yaml
+      - name: "RTL-to-GDSII (synthesis, PnR, CTS, routing, STA, DRC, LVS)"
+        run: librelane --dockerized --run-tag p${{ matrix.period }} config_p${{ matrix.period }}.yaml
+      - name: Gate-level simulation of the routed netlist
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" runs || true
+          bash scripts/run_sim.sh gl runs/p${{ matrix.period }}/final/nl/mac_pipe.nl.v 3
+      - name: Render layout
+        if: matrix.period == 10
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y klayout xvfb
+          mkdir -p img
+          xvfb-run -a klayout -zz -rd gds=runs/p10/final/gds/mac_pipe.gds -rd png=img/layout.png -r scripts/render_layout.py
+      - name: Collect results
+        if: always()
+        run: |
+          P=p${{ matrix.period }}
+          mkdir -p art/runs/$P/final art/gl
+          cp runs/$P/final/metrics.json art/runs/$P/final/ 2>/dev/null || true
+          cp build/sim_gl/results.md art/gl/$P.md 2>/dev/null || true
+          cp img/layout.png art/layout.png 2>/dev/null || true
+          {
+            echo "### LibreLane @ ${{ matrix.period }} ns"
+            cat build/sim_gl/results.md 2>/dev/null || echo "gate-level sim not run"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-p${{ matrix.period }}
+          path: art/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gds-p${{ matrix.period }}
+          path: |
+            runs/p${{ matrix.period }}/final/gds/*.gds
+            runs/p${{ matrix.period }}/final/nl/*.nl.v
+            runs/p${{ matrix.period }}/final/metrics.json
+          if-no-files-found: ignore
+
+  results:
+    name: Commit results table
+    needs: flow
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: art
+          merge-multiple: true
+      - name: Build docs/results.md
+        run: |
+          python3 scripts/summarize.py art docs/results.md
+          cp art/layout.png docs/layout.png 2>/dev/null || true
+          cat docs/results.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/results.md docs/layout.png 2>/dev/null || git add docs/results.md
+          git diff --cached --quiet || git commit -m "CI: update SKY130 results"
+          git push
