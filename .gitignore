@@ -1,0 +1,9 @@
+runs/
+build/
+gl/
+img/
+art/
+*.vcd
+*.log
+__pycache__/
+push.bat

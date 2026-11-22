@@ -1,0 +1,14 @@
+# LibreLane (OpenLane 2 successor) configuration for mac_pipe on SkyWater SKY130
+# Run:  librelane --dockerized -c CLOCK_PERIOD=10 config.yaml
+DESIGN_NAME: mac_pipe
+VERILOG_FILES: dir::rtl/mac_pipe.sv
+
+CLOCK_PORT: clk
+CLOCK_PERIOD: 10          # ns; CI also tries tighter clocks (see .github/workflows)
+
+# Floorplan: let the die size follow the synthesized cell area
+FP_CORE_UTIL: 40
+
+# Inputs/outputs get 20% of the period as external delay (LibreLane default);
+# the timing that matters here is register to register.
+IO_DELAY_CONSTRAINT: 20
