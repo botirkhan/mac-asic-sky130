@@ -5,7 +5,9 @@ Library: `sky130_fd_sc_hd`. Fmax estimates use 1 / (period − setup WNS) at tha
 
 | Clock target | Setup WNS (ss, 100 °C, 1.60 V) | Setup WNS (tt, 25 °C, 1.80 V) | Fmax est. ss / tt | Hold WNS | Setup / hold violations | Std-cell area | Cells | Die area | Utilization | Power | DRC (Magic / KLayout) | LVS errors | Antenna nets | Gate-level sim |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| (no completed runs) | | | | | | | | | | | | | | |
+| 10 ns (100 MHz) | -3.645 ns | 2.853 ns | 73 / 140 MHz | 0.105 ns | 82 / 0 | 55,200 µm² | 11,296 | 63,677 µm² | 51.0% | 25.93 mW | 0 / 0 | 0 | 0 | 3/3 seeds pass, 44254 checks |
+| 7 ns (143 MHz) | -6.590 ns | -0.141 ns | 74 / 140 MHz | 0.110 ns | 212 / 0 | 55,200 µm² | 11,174 | 63,677 µm² | 52.0% | 37.47 mW | 0 / 0 | 0 | 0 | not run |
+| 5 ns (200 MHz) | -8.581 ns | -2.167 ns | 74 / 140 MHz | 0.107 ns | 330 / 0 | 55,200 µm² | 11,152 | 63,677 µm² | 52.2% | 52.45 mW | 0 / 0 | 0 | 0 | not run |
 
 ## Same RTL on the Artix-7 FPGA (for comparison)
 
